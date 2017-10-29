@@ -40,7 +40,7 @@ export default function connectAdvanced(
       }))(YourComponent)
 
     Access to dispatch is provided to the factory so selectorFactories can bind actionCreators
-    outside of their selector as an optimization. Options passed to connectAdvanced are passed to
+    outside of their selector as an optimization(优化). Options passed to connectAdvanced are passed to
     the selectorFactory, along with displayName and WrappedComponent, as the second argument.
 
     Note that selectorFactory is responsible for all caching/memoization of inbound and outbound
@@ -291,6 +291,7 @@ export default function connectAdvanced(
       }
     }
 
+    //最终返回的连接到store上的组件
     return hoistStatics(Connect, WrappedComponent)
   }
 }

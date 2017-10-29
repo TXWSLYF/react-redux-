@@ -6,7 +6,7 @@ import defaultMergePropsFactories from './mergeProps'
 import defaultSelectorFactory from './selectorFactory'
 
 /*
-  connect is a facade over connectAdvanced. It turns its args into a compatible
+  connect is a facade over connectAdvanced. It turns its args into a compatible(兼容的)
   selectorFactory, which has the signature:
 
     (dispatch, options) => (nextState, nextOwnProps) => nextFinalProps
@@ -69,6 +69,7 @@ export function createConnect({
       getDisplayName: name => `Connect(${name})`,
 
       // if mapStateToProps is falsy, the Connect component doesn't subscribe to store state changes
+      //是否要订阅store的变化
       shouldHandleStateChanges: Boolean(mapStateToProps),
 
       // passed through to selectorFactory
