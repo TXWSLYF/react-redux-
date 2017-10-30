@@ -1,4 +1,4 @@
-import { Component, createElement } from 'react'
+import {Component, createElement} from 'react'
 import storeShape from '../utils/storeShape'
 import shallowEqual from '../utils/shallowEqual'
 import wrapActionCreators from '../utils/wrapActionCreators'
@@ -20,6 +20,7 @@ function getDisplayName(WrappedComponent) {
 }
 
 let errorObject = { value: null }
+
 function tryCatch(fn, ctx) {
   try {
     return fn.apply(ctx)
@@ -33,6 +34,7 @@ function tryCatch(fn, ctx) {
 let nextVersion = 0
 
 export default function connect(mapStateToProps, mapDispatchToProps, mergeProps, options = {}) {
+  //判断是否监听store变化
   const shouldSubscribe = Boolean(mapStateToProps)
   const mapState = mapStateToProps || defaultMapStateToProps
 
@@ -64,6 +66,7 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
       }
     }
 
+    //只有开发环境下需要对finalMergeProps的返回值进行检测
     function computeMergedProps(stateProps, dispatchProps, parentProps) {
       const mergedProps = finalMergeProps(stateProps, dispatchProps, parentProps)
       if (process.env.NODE_ENV !== 'production') {
@@ -74,14 +77,18 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
 
     class Connect extends Component {
       shouldComponentUpdate() {
+        //1.当pure为false时，强制刷新
+        // 这里通常都是hasStoreStateChanged = true, 其他两项很少生效
         return !pure || this.haveOwnPropsChanged || this.hasStoreStateChanged
       }
-
       constructor(props, context) {
+        //调用了super才可以在构造函数中获取到props和context
         super(props, context)
         this.version = version
+        //获取到redux的store，一般都是从context.store获取到的
         this.store = props.store || context.store
 
+        //如果没有直接传入store参数，并且也没有用Provider包装，提示
         invariant(this.store,
           `Could not find "store" in either the context or ` +
           `props of "${connectDisplayName}". ` +
@@ -90,11 +97,14 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
         )
 
         const storeState = this.store.getState()
+        //初始化state
         this.state = { storeState }
+        //初始化this信息
         this.clearCache()
       }
 
       computeStateProps(store, props) {
+        //此时还未得到最终的mapStateToProps
         if (!this.finalMapStateToProps) {
           return this.configureFinalMapState(store, props)
         }
@@ -110,11 +120,14 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
         return stateProps
       }
 
+      //决定最终的mapStateToProps
       configureFinalMapState(store, props) {
         const mappedState = mapState(store.getState(), props)
         const isFactory = typeof mappedState === 'function'
 
+        //决定最终的mapStateToProps
         this.finalMapStateToProps = isFactory ? mappedState : mapState
+        //如果mapStateToProps函数的长度不为1，则说明stateProps依赖于ownProps
         this.doStatePropsDependOnOwnProps = this.finalMapStateToProps.length !== 1
 
         if (isFactory) {
@@ -160,6 +173,7 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
         return mappedDispatch
       }
 
+      //检测stateProps是否改变
       updateStatePropsIfNeeded() {
         const nextStateProps = this.computeStateProps(this.store, this.props)
         if (this.stateProps && shallowEqual(nextStateProps, this.stateProps)) {
@@ -208,6 +222,7 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
         }
       }
 
+      //监听store
       componentDidMount() {
         this.trySubscribe()
       }
@@ -243,15 +258,22 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
 
         const storeState = this.store.getState()
         const prevStoreState = this.state.storeState
+        //如果storeState没有改变，直接返回，无需重新渲染
         if (pure && prevStoreState === storeState) {
           return
         }
 
+        //如果stateProps不依赖于ownProps，即mapStateToProps只接受一个参数
+        //这里需要指定一个doStatePropsDependOnOwnProps变量的原因为，当handleChange触发时
+        //还获取不到最新的props，也就无法判断stateProps是否发生了改变
+        //故此也就无法进行预计算(Precalculation)
         if (pure && !this.doStatePropsDependOnOwnProps) {
+          //判断stateProps是否改变
           const haveStatePropsChanged = tryCatch(this.updateStatePropsIfNeeded, this)
           if (!haveStatePropsChanged) {
             return
           }
+          //如果计算出错
           if (haveStatePropsChanged === errorObject) {
             this.statePropsPrecalculationError = errorObject.value
           }
@@ -259,6 +281,7 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
         }
 
         this.hasStoreStateChanged = true
+        //setState触发重新渲染
         this.setState({ storeState })
       }
 
@@ -273,11 +296,11 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
 
       render() {
         const {
-          haveOwnPropsChanged,
-          hasStoreStateChanged,
-          haveStatePropsBeenPrecalculated,
-          statePropsPrecalculationError,
-          renderedElement
+          haveOwnPropsChanged, //初始为true，之后一般为false
+          hasStoreStateChanged, //初始为true，每当handleChange触发，都会被赋值为true
+          haveStatePropsBeenPrecalculated, //初始为false
+          statePropsPrecalculationError, //初始为null
+          renderedElement //初始为undefined
         } = this
 
         this.haveOwnPropsChanged = false
@@ -285,22 +308,28 @@ export default function connect(mapStateToProps, mapDispatchToProps, mergeProps,
         this.haveStatePropsBeenPrecalculated = false
         this.statePropsPrecalculationError = null
 
+        //如果组件预计算属性发生异常，报出异常
         if (statePropsPrecalculationError) {
           throw statePropsPrecalculationError
         }
 
         let shouldUpdateStateProps = true
         let shouldUpdateDispatchProps = true
+        //判断是否需要更新stateProps和dispatchProps
         if (pure && renderedElement) {
+          //1.如果storeState发生了改变
+          //2.ownProps改变，并且stateProps依赖于ownProps
           shouldUpdateStateProps = hasStoreStateChanged || (
             haveOwnPropsChanged && this.doStatePropsDependOnOwnProps
           )
+          //1.ownProps改变，并且dispatchProps依赖于ownProps
           shouldUpdateDispatchProps =
             haveOwnPropsChanged && this.doDispatchPropsDependOnOwnProps
         }
 
         let haveStatePropsChanged = false
         let haveDispatchPropsChanged = false
+        //如果已经经过了预计算，那么stateProps已经改变
         if (haveStatePropsBeenPrecalculated) {
           haveStatePropsChanged = true
         } else if (shouldUpdateStateProps) {
